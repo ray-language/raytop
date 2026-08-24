@@ -1,0 +1,38 @@
+// ps/uptime parsing over fixed fixtures.
+import sample;
+
+@test
+fn parses_a_ps_line_with_spaces_in_the_command() {
+    let line = "  606   30.1  0.6  209328 Ss   _windowserver    /System/Library/Window Server.app/WindowServer";
+    match (sample.parse_ps_line(line)) {
+        Option.Some(p) => {
+            assert_eq(p.pid, 606);
+            assert_eq(p.cpu, 30.1);
+            assert_eq(p.mem, 0.6);
+            assert_eq(p.rss_kb, 209328);
+            assert_eq(p.state, "Ss");
+            assert_eq(p.user, "_windowserver");
+            assert_eq(p.command, "/System/Library/Window Server.app/WindowServer");
+        },
+        Option.None => panic("expected a parse"),
+    }
+}
+
+@test
+fn skips_garbage_lines() {
+    match (sample.parse_ps_line("cabecera no numerica")) {
+        Option.None => { },
+        Option.Some(p) => panic("garbage should not parse"),
+    }
+    let text = "  1  0.1 0.1 100 Ss root /sbin/launchd\nbasura\n  2  0.2 0.2 200 R  ana  /bin/thing\n";
+    assert_eq(sample.parse_ps(text).len(), 2);
+}
+
+@test
+fn parses_load_from_macos_and_linux_uptime() {
+    let mac = "16:14  up 10 days, 14:38, 2 users, load averages: 3.34 2.26 2.00";
+    assert_eq(sample.parse_load(mac), "3.34 2.26 2.00");
+    let linux = " 16:14:02 up 10 days,  2:12,  1 user,  load average: 0.10, 0.20, 0.30";
+    assert_eq(sample.parse_load(linux), "0.10 0.20 0.30");
+    assert_eq(sample.parse_load("sin nada"), "");
+}

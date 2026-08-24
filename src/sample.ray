@@ -1,0 +1,138 @@
+// raytop — system sampling via std/process (`ps` and `uptime`), no /proc:
+// works the same on macOS and Linux.
+import std/process;
+
+pub struct Proc {
+    pid: int,
+    cpu: float,
+    mem: float,
+    rss_kb: int,
+    state: string,
+    user: string,
+    command: string,
+}
+
+pub struct Snapshot {
+    procs: [Proc],
+    load: string,
+    cpu_total: float,
+    rss_total_kb: int,
+}
+
+fn run_text(program: string, argv: [string]) -> Result<string, string> {
+    let out = process.run(program, argv)?;
+    match (out.exit) {
+        process.Exit.Code(code) => {
+            if (code != 0) {
+                return Result.Err(program + " exited " + to_string(code));
+            }
+        },
+        process.Exit.Signal(sig) => {
+            return Result.Err(program + " killed by signal " + to_string(sig));
+        },
+    }
+    from_utf8(out.stdout)
+}
+
+// Splits a ps row on runs of spaces into at most `limit` fields: the LAST
+// field keeps its inner spaces (the command path may contain them).
+pub fn split_fields(line: string, limit: int) -> [string] {
+    var out: [string] = [];
+    var cur = "";
+    var i = 0;
+    let cs = line.chars();
+    while (i < cs.len()) {
+        let c = cs[i];
+        if (c == ' ' && out.len() < limit - 1) {
+            if (cur != "") {
+                out.push(cur);
+                cur = "";
+            }
+        } else {
+            cur = cur + to_string(c);
+        }
+        i = i + 1;
+    }
+    if (cur != "") {
+        out.push(cur.trim());
+    }
+    out
+}
+
+pub fn parse_ps_line(line: string) -> Option<Proc> {
+    let f = split_fields(line, 7);
+    if (f.len() < 7) {
+        return Option.None;
+    }
+    let pid = match (parse_int(f[0])) {
+        Option.Some(n) => n,
+        Option.None => {
+            return Option.None;
+        },
+    };
+    let cpu = match (parse_float(f[1])) {
+        Option.Some(x) => x,
+        Option.None => 0.0,
+    };
+    let mem = match (parse_float(f[2])) {
+        Option.Some(x) => x,
+        Option.None => 0.0,
+    };
+    let rss = match (parse_int(f[3])) {
+        Option.Some(n) => n,
+        Option.None => 0,
+    };
+    Option.Some(
+        Proc { pid: pid, cpu: cpu, mem: mem, rss_kb: rss, state: f[4], user: f[5], command: f[6] }
+    )
+}
+
+pub fn parse_ps(text: string) -> [Proc] {
+    var out: [Proc] = [];
+    for line in text.split("\n") {
+        if (line.trim() != "") {
+            match (parse_ps_line(line)) {
+                Option.Some(p) => {
+                    out.push(p);
+                },
+                Option.None => { },
+            }
+        }
+    }
+    out
+}
+
+// "… load averages: 3.34 2.26 2.00" (macOS) / "load average: 0.10, …" (Linux).
+pub fn parse_load(text: string) -> string {
+    match (text.index_of("load average")) {
+        Option.Some(i) => {
+            match (text.index_of(":")) {
+                Option.Some(z) => {
+                    let tail = text.substring(i, text.len());
+                    match (tail.index_of(":")) {
+                        Option.Some(c) => tail.substring(c + 1, tail.len()).trim().replace(",", ""),
+                        Option.None => "",
+                    }
+                },
+                Option.None => "",
+            }
+        },
+        Option.None => "",
+    }
+}
+
+pub fn take_snapshot() -> Result<Snapshot, string> {
+    let ps_text = run_text("ps", ["-axo", "pid=,pcpu=,pmem=,rss=,state=,user=,comm="])?;
+    let procs = parse_ps(ps_text);
+    var cpu_total = 0.0;
+    var rss_total = 0;
+    for p in procs {
+        cpu_total = cpu_total + p.cpu;
+        rss_total = rss_total + p.rss_kb;
+    }
+    let load = match (run_text("uptime", [])) {
+        Result.Ok(u) => parse_load(u),
+        Result.Err(e) => "",
+    };
+    Result.Ok(Snapshot { procs: procs, load: load, cpu_total: cpu_total, rss_total_kb: rss_total })
+}

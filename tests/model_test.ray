@@ -1,0 +1,73 @@
+// Sorting, filtering and scroll clamping over a fixed snapshot.
+import sample;
+import model;
+
+fn proc(pid: int, cpu: float, rss: int, user: string, command: string) -> sample.Proc {
+    sample.Proc {
+        pid: pid,
+        cpu: cpu,
+        mem: 0.0,
+        rss_kb: rss,
+        state: "S",
+        user: user,
+        command: command
+    }
+}
+
+fn snap() -> sample.Snapshot {
+    var ps: [sample.Proc] = [];
+    ps.push(proc(10, 1.5, 500, "root", "/sbin/launchd"));
+    ps.push(proc(20, 9.0, 100, "ana", "/usr/bin/vim"));
+    ps.push(proc(30, 9.0, 900, "luis", "/usr/bin/claude"));
+    ps.push(proc(40, 0.0, 200, "ana", "/bin/sleep"));
+    sample.Snapshot { procs: ps, load: "", cpu_total: 19.5, rss_total_kb: 1700 }
+}
+
+@test
+fn sorts_by_cpu_mem_and_pid() {
+    var m = model.new_model();
+    let by_cpu = model.visible(snap(), m);
+    assert_eq(by_cpu[0].pid, 20);
+    assert_eq(by_cpu[1].pid, 30);
+    assert_eq(by_cpu[3].pid, 40);
+    m.sort = model.SortBy.Mem;
+    let by_mem = model.visible(snap(), m);
+    assert_eq(by_mem[0].pid, 30);
+    assert_eq(by_mem[1].pid, 10);
+    m.sort = model.SortBy.Pid;
+    let by_pid = model.visible(snap(), m);
+    assert_eq(by_pid[0].pid, 10);
+    assert_eq(by_pid[3].pid, 40);
+}
+
+@test
+fn filter_matches_command_user_and_pid() {
+    var m = model.new_model();
+    m.filter = "ana";
+    assert_eq(model.visible(snap(), m).len(), 2);
+    m.filter = "CLAUDE";
+    let hits = model.visible(snap(), m);
+    assert_eq(hits.len(), 1);
+    assert_eq(hits[0].pid, 30);
+    m.filter = "30";
+    assert_eq(model.visible(snap(), m).len(), 1);
+    m.filter = "zz";
+    assert_eq(model.visible(snap(), m).len(), 0);
+}
+
+@test
+fn clamp_keeps_selection_inside_page() {
+    var m = model.new_model();
+    m.selected = 99;
+    model.clamp(m, 10, 4);
+    assert_eq(m.selected, 9);
+    assert_eq(m.scroll, 6);
+    m.selected = 0;
+    model.clamp(m, 10, 4);
+    assert_eq(m.scroll, 0);
+    m.selected = 0 - 5;
+    model.clamp(m, 10, 4);
+    assert_eq(m.selected, 0);
+    model.clamp(m, 0, 4);
+    assert_eq(m.selected, 0);
+}

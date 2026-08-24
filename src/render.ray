@@ -1,0 +1,157 @@
+// raytop — frame building (pure) and differential painting.
+//
+// A frame is exactly `rows` strings, each padded to `cols` display cells, so
+// repainting a changed line is one absolute cursor move + overwrite — no
+// clear-to-EOL needed, no flicker. ANSI styling lives inside the line, and the
+// diff compares the styled strings, so a selection change repaints only the
+// two rows involved.
+import sample;
+import model;
+import width;
+
+// String literals have no \x/\u escapes (recorded ergonomics finding): the
+// ESC byte is built by code point, like raycode does.
+pub fn esc() -> string {
+    match (char_from_code(27)) {
+        Option.Some(c) => to_string(c),
+        Option.None => "",
+    }
+}
+
+fn rev() -> string { esc() + "[7m" }
+
+fn bold() -> string { esc() + "[1m" }
+
+fn reset() -> string { esc() + "[0m" }
+
+pub fn human_kb(kb: int) -> string {
+    if (kb < 1024) {
+        return to_string(kb) + "K";
+    }
+    let mb10 = kb * 10 / 1024;
+    if (mb10 < 10240) {
+        return to_string(mb10 / 10) + "." + to_string(mb10 % 10) + "M";
+    }
+    let gb10 = mb10 / 1024;
+    to_string(gb10 / 10) + "." + to_string(gb10 % 10) + "G"
+}
+
+fn fmt1(f: float) -> string {
+    let tenths = (f * 10.0) as int;
+    to_string(tenths / 10) + "." + to_string(tenths % 10)
+}
+
+fn header_line(snap: sample.Snapshot, cols: int) -> string {
+    let text = " raytop  load " + snap.load + "  procs " + to_string(
+        snap.procs.len()
+    ) + "  cpu " + fmt1(snap.cpu_total) + "%  rss " + human_kb(snap.rss_total_kb);
+    bold() + width.fit(text, cols) + reset()
+}
+
+fn columns_line(m: model.Model, cols: int) -> string {
+    let mark_cpu = match (m.sort) {
+        model.SortBy.Cpu => "▾",
+        _ => " ",
+    };
+    let mark_mem = match (m.sort) {
+        model.SortBy.Mem => "▾",
+        _ => " ",
+    };
+    let mark_pid = match (m.sort) {
+        model.SortBy.Pid => "▾",
+        _ => " ",
+    };
+    let text = width.fit_right(
+        "PID" + mark_pid,
+        7
+    ) + " " + width.fit_right("CPU%" + mark_cpu, 6) + " " + width.fit_right("MEM%" + mark_mem, 6) + " " + width.fit_right("RSS", 7) + " " + width.fit("ST", 3) + width.fit("USER", 10) + " COMMAND";
+    rev() + width.fit(text, cols) + reset()
+}
+
+fn row_line(p: sample.Proc, selected: bool, cols: int) -> string {
+    let text = width.fit_right(
+        to_string(p.pid),
+        7
+    ) + " " + width.fit_right(fmt1(p.cpu), 6) + " " + width.fit_right(fmt1(p.mem), 6) + " " + width.fit_right(human_kb(p.rss_kb), 7) + " " + width.fit(p.state, 3) + width.fit(p.user, 10) + " " + p.command;
+    if (selected) {
+        rev() + width.fit(text, cols) + reset()
+    } else {
+        width.fit(text, cols)
+    }
+}
+
+fn footer_line(m: model.Model, shown: int, total: int, cols: int) -> string {
+    let text = if (m.typing_filter) {
+        " filter: " + m.filter + "▏  (Enter fija, Esc borra)"
+    } else if (m.filter != "") {
+        " q quit  c/m/p sort  / filter [" + m.filter + "]  ↑↓ move  r refresh   " + to_string(
+            shown
+        ) + "/" + to_string(total)
+    } else {
+        " q quit  c/m/p sort  / filter  ↑↓ move  r refresh   " + to_string(
+            shown
+        ) + "/" + to_string(total)
+    };
+    rev() + width.fit(text, cols) + reset()
+}
+
+// The visible page height for a given terminal height.
+pub fn page_of(rows: int) -> int {
+    let p = rows - 3;
+    if (p < 1) { 1 } else { p }
+}
+
+pub fn frame(snap: sample.Snapshot, m: model.Model, cols: int, rows: int) -> [string] {
+    var out: [string] = [];
+    let visible = model.visible(snap, m);
+    let page = page_of(rows);
+    model.clamp(m, visible.len(), page);
+    out.push(header_line(snap, cols));
+    out.push(columns_line(m, cols));
+    var i = 0;
+    while (i < page) {
+        let idx = m.scroll + i;
+        if (idx < visible.len()) {
+            out.push(row_line(visible[idx], idx == m.selected, cols));
+        } else {
+            out.push(width.fit("", cols));
+        }
+        i = i + 1;
+    }
+    out.push(footer_line(m, visible.len(), snap.procs.len(), cols));
+    out
+}
+
+// The escape string that turns `prev` into `next`: one absolute-positioned
+// overwrite per changed line; "" when nothing changed.
+pub fn paint_diff(prev: [string], next: [string]) -> string {
+    var out = "";
+    var i = 0;
+    while (i < next.len()) {
+        let same = i < prev.len() && prev[i] == next[i];
+        if (!same) {
+            out = out + esc() + "[" + to_string(i + 1) + ";1H" + next[i];
+        }
+        i = i + 1;
+    }
+    out
+}
+
+// Plain one-shot dump (no TUI): the top N by the model's sort.
+pub fn dump(snap: sample.Snapshot, m: model.Model, top: int) {
+    let visible = model.visible(snap, m);
+    print(
+        "load " + snap.load + "  procs " + to_string(snap.procs.len()) + "  cpu " + fmt1(snap.cpu_total) + "%  rss " + human_kb(snap.rss_total_kb)
+    );
+    print(
+        width.fit_right("PID", 7) + " " + width.fit_right("CPU%", 6) + " " + width.fit_right("MEM%", 6) + " " + width.fit_right("RSS", 7) + " " + width.fit("ST", 3) + width.fit("USER", 10) + " COMMAND"
+    );
+    var i = 0;
+    while (i < visible.len() && i < top) {
+        let p = visible[i];
+        print(
+            width.fit_right(to_string(p.pid), 7) + " " + width.fit_right(fmt1(p.cpu), 6) + " " + width.fit_right(fmt1(p.mem), 6) + " " + width.fit_right(human_kb(p.rss_kb), 7) + " " + width.fit(p.state, 3) + width.fit(p.user, 10) + " " + p.command
+        );
+        i = i + 1;
+    }
+}

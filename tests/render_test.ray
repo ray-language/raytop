@@ -1,0 +1,84 @@
+// Frame building and the differential painter (pure — no terminal involved).
+import sample;
+import model;
+import render;
+
+fn snap() -> sample.Snapshot {
+    var ps: [sample.Proc] = [];
+    ps.push(
+        sample.Proc {
+            pid: 10,
+            cpu: 5.0,
+            mem: 0.1,
+            rss_kb: 2048,
+            state: "S",
+            user: "ana",
+            command: "/usr/bin/vim"
+        }
+    );
+    ps.push(
+        sample.Proc {
+            pid: 20,
+            cpu: 1.0,
+            mem: 0.2,
+            rss_kb: 3145728,
+            state: "R",
+            user: "luis",
+            command: "/usr/bin/claude"
+        }
+    );
+    sample.Snapshot { procs: ps, load: "1.00 1.00 1.00", cpu_total: 6.0, rss_total_kb: 3147776 }
+}
+
+@test
+fn human_kb_scales() {
+    assert_eq(render.human_kb(512), "512K");
+    assert_eq(render.human_kb(2048), "2.0M");
+    assert_eq(render.human_kb(3145728), "3.0G");
+}
+
+@test
+fn frame_has_exactly_rows_lines() {
+    var m = model.new_model();
+    let f = render.frame(snap(), m, 80, 10);
+    assert_eq(f.len(), 10);
+    assert(f[0].contains("raytop"));
+    assert(f[1].contains("COMMAND"));
+    assert(f[2].contains("vim"));
+    assert(f[3].contains("claude"));
+    // Blank filler rows still fill the width (overwrite semantics).
+    assert(f[5].len() >= 80);
+    assert(f[9].contains("q quit"));
+}
+
+@test
+fn selection_moves_repaint_only_two_rows() {
+    var m = model.new_model();
+    let before = render.frame(snap(), m, 80, 10);
+    m.selected = 1;
+    let after = render.frame(snap(), m, 80, 10);
+    var changed = 0;
+    var i = 0;
+    while (i < after.len()) {
+        if (before[i] != after[i]) {
+            changed = changed + 1;
+        }
+        i = i + 1;
+    }
+    assert_eq(changed, 2);
+}
+
+@test
+fn paint_diff_positions_only_changed_lines() {
+    let a = ["uno", "dos", "tres"];
+    let b = ["uno", "DOS", "tres"];
+    let ops = render.paint_diff(a, b);
+    assert(ops.contains("[2;1H"));
+    assert(!ops.contains("[1;1H"));
+    assert(!ops.contains("[3;1H"));
+    assert_eq(render.paint_diff(b, b), "");
+    var empty: [string] = [];
+    let full = render.paint_diff(empty, b);
+    assert(full.contains("[1;1H"));
+    assert(full.contains("[3;1H"));
+}

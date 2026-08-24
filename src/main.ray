@@ -1,0 +1,89 @@
+// raytop — a live process monitor for the terminal (htop, in small).
+import sample;
+import model;
+import render;
+import app;
+
+fn usage() {
+    eprint("usage: raytop [--interval MS] [--once [N]] [--sort cpu|mem|pid]");
+    eprint("");
+    eprint(
+        "  interactive keys: q quit · c/m/p sort · / filter · arrows/PgUp/PgDn move · r refresh"
+    );
+    eprint("  --once prints a plain top-N snapshot (default 15) and exits");
+}
+
+fn flag_value(av: [string], name: string) -> Option<string> {
+    var i = 0;
+    while (i + 1 < av.len()) {
+        if (av[i] == name) {
+            return Option.Some(av[i + 1]);
+        }
+        i = i + 1;
+    }
+    Option.None
+}
+
+fn flag_int(av: [string], name: string, fallback: int) -> int {
+    match (flag_value(av, name)) {
+        Option.Some(s) => {
+            match (parse_int(s)) {
+                Option.Some(n) => n,
+                Option.None => fallback,
+            }
+        },
+        Option.None => fallback,
+    }
+}
+
+fn has_flag(av: [string], name: string) -> bool {
+    for a in av {
+        if (a == name) {
+            return true;
+        }
+    }
+    false
+}
+
+fn sort_of(av: [string]) -> model.SortBy {
+    match (flag_value(av, "--sort")) {
+        Option.Some(s) => {
+            if (s == "mem") {
+                model.SortBy.Mem
+            } else if (s == "pid") {
+                model.SortBy.Pid
+            } else {
+                model.SortBy.Cpu
+            }
+        },
+        Option.None => model.SortBy.Cpu,
+    }
+}
+
+fn main() -> int {
+    let av = args();
+    if (has_flag(av, "--help") || has_flag(av, "-h")) {
+        usage();
+        return 0;
+    }
+    if (has_flag(av, "--once")) {
+        match (sample.take_snapshot()) {
+            Result.Err(e) => {
+                eprint("raytop: " + e);
+                1
+            },
+            Result.Ok(snap) => {
+                var m = model.new_model();
+                m.sort = sort_of(av);
+                render.dump(snap, m, flag_int(av, "--once", 15));
+                0
+            },
+        }
+    } else {
+        var interval = flag_int(av, "--interval", 1000);
+        if (interval < 100) {
+            interval = 100;
+        }
+        app.run(interval)
+    }
+}

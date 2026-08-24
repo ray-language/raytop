@@ -1,0 +1,233 @@
+// raytop — the full-screen loop: alternate screen, raw mode, key-or-deadline.
+//
+// One fiber, one loop: io.read_timeout(…, until_next_refresh) either delivers
+// key bytes (decoded with term.decode, the raycode pattern) or times out and
+// it is sampling time. Resize is detected by polling term.size() every
+// iteration (no SIGWINCH surface — recorded finding: signals() only carries
+// TERM/INT/WINCH as ints… WINCH would do, but polling is the proven pattern).
+import std/io;
+import std/time;
+import std/term;
+from std/term import Key;
+import sample;
+import model;
+import render;
+
+fn alt_on() -> string {
+    let e = render.esc();
+    e + "[?1049h" + e + "[?25l" + e + "[2J" + e + "[H"
+}
+
+fn alt_off() -> string {
+    let e = render.esc();
+    e + "[?1049l" + e + "[?25h"
+}
+
+struct App {
+    m: model.Model,
+    snap: sample.Snapshot,
+    prev: [string],
+    pending: bytes,
+    cols: int,
+    rows: int,
+    quit: bool,
+}
+
+fn write_now(s: string) {
+    io.write(s);
+    io.flush();
+}
+
+fn size_now() -> (int, int) {
+    match (term.size()) {
+        Option.Some(wh) => wh,
+        Option.None => (80, 24),
+    }
+}
+
+fn repaint(a: App) {
+    let next = render.frame(a.snap, a.m, a.cols, a.rows);
+    let ops = render.paint_diff(a.prev, next);
+    if (ops != "") {
+        write_now(ops);
+    }
+    a.prev = next;
+}
+
+fn refresh(a: App) {
+    match (sample.take_snapshot()) {
+        Result.Ok(s) => {
+            a.snap = s;
+        },
+        Result.Err(e) => { },
+    }
+    repaint(a);
+}
+
+fn check_resize(a: App) {
+    let (c, r) = size_now();
+    if (c != a.cols || r != a.rows) {
+        a.cols = c;
+        a.rows = r;
+        var empty: [string] = [];
+        a.prev = empty;
+        write_now(render.esc() + "[2J");
+        repaint(a);
+    }
+}
+
+fn on_key(a: App, k: Key) {
+    if (a.m.typing_filter) {
+        match (k) {
+            Key.Char(c) => {
+                a.m.filter = a.m.filter + to_string(c);
+            },
+            Key.Backspace => {
+                let f = a.m.filter;
+                if (f.len() > 0) {
+                    a.m.filter = f.substring(0, f.len() - 1);
+                }
+            },
+            Key.Enter => {
+                a.m.typing_filter = false;
+            },
+            Key.Esc => {
+                a.m.typing_filter = false;
+                a.m.filter = "";
+            },
+            _ => { },
+        }
+        repaint(a);
+        return;
+    }
+    match (k) {
+        Key.Char(c) => {
+            if (c == 'q') {
+                a.quit = true;
+            } else if (c == 'c') {
+                a.m.sort = model.SortBy.Cpu;
+            } else if (c == 'm') {
+                a.m.sort = model.SortBy.Mem;
+            } else if (c == 'p') {
+                a.m.sort = model.SortBy.Pid;
+            } else if (c == '/') {
+                a.m.typing_filter = true;
+                a.m.filter = "";
+            } else if (c == 'r') {
+                refresh(a);
+                return;
+            }
+        },
+        Key.Ctrl(c) => {
+            if (c == 'c') {
+                a.quit = true;
+            }
+        },
+        Key.Up => {
+            a.m.selected = a.m.selected - 1;
+        },
+        Key.Down => {
+            a.m.selected = a.m.selected + 1;
+        },
+        Key.PageUp => {
+            a.m.selected = a.m.selected - render.page_of(a.rows);
+        },
+        Key.PageDown => {
+            a.m.selected = a.m.selected + render.page_of(a.rows);
+        },
+        Key.Home => {
+            a.m.selected = 0;
+        },
+        Key.End => {
+            a.m.selected = 1000000;
+        },
+        _ => { },
+    }
+    if (!a.quit) {
+        repaint(a);
+    }
+}
+
+// Drains complete key sequences from the pending buffer; an incomplete prefix
+// waits 25 ms for the rest (a lone ESC resolves to the Esc key — raycode's
+// discipline).
+fn drain_keys(a: App) {
+    var more = true;
+    while (more && a.pending.len() > 0 && !a.quit) {
+        match (term.decode(a.pending)) {
+            Option.Some(decoded) => {
+                a.pending = a.pending.sub_bytes(decoded.1, a.pending.len());
+                on_key(a, decoded.0);
+            },
+            Option.None => {
+                match (io.read_timeout(64, 25)) {
+                    io.ReadResult.Data(chunk) => {
+                        a.pending = a.pending + chunk;
+                    },
+                    io.ReadResult.TimedOut => {
+                        let alone = a.pending == b"\x1b";
+                        a.pending = b"";
+                        if (alone) {
+                            on_key(a, Key.Esc);
+                        }
+                    },
+                    io.ReadResult.Eof => {
+                        a.quit = true;
+                    },
+                }
+            },
+        }
+    }
+}
+
+fn event_loop(interval_ms: int) -> int {
+    let (c0, r0) = size_now();
+    var empty: [string] = [];
+    let a = App {
+        m: model.new_model(),
+        snap: sample.Snapshot { procs: [], load: "", cpu_total: 0.0, rss_total_kb: 0 },
+        prev: empty,
+        pending: b"",
+        cols: c0,
+        rows: r0,
+        quit: false
+    };
+    write_now(alt_on());
+    refresh(a);
+    var next_at = time.monotonic() + interval_ms;
+    while (!a.quit) {
+        check_resize(a);
+        var wait = next_at - time.monotonic();
+        if (wait <= 0) {
+            refresh(a);
+            next_at = time.monotonic() + interval_ms;
+            wait = interval_ms;
+        }
+        match (io.read_timeout(64, wait)) {
+            io.ReadResult.Data(chunk) => {
+                a.pending = a.pending + chunk;
+                drain_keys(a);
+            },
+            io.ReadResult.TimedOut => { },
+            io.ReadResult.Eof => {
+                a.quit = true;
+            },
+        }
+    }
+    write_now(alt_off());
+    0
+}
+
+pub fn run(interval_ms: int) -> int {
+    if (!term.is_tty(0) || !term.is_tty(1)) {
+        eprint("raytop: stdin/stdout must be a terminal (use --once for a plain dump)");
+        return 1;
+    }
+    match (term.raw(fn() -> int { event_loop(interval_ms) })) {
+        Result.Ok(code) => code,
+        Result.Err(e) => {
+            eprint("raytop: " + e);
+            1
+        },
+    }
+}

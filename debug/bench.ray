@@ -1,0 +1,29 @@
+import std/time;
+import sample;
+import model;
+import render;
+
+fn main() -> int {
+    var t0 = time.monotonic();
+    let snap = match (sample.take_snapshot()) {
+        Result.Ok(s) => s,
+        Result.Err(e) => {
+            eprint(e);
+            return 1;
+        },
+    };
+    let sample_ms = time.monotonic() - t0;
+    let m = model.new_model();
+    t0 = time.monotonic();
+    var i = 0;
+    while (i < 100) {
+        render.frame(snap, m, 120, 40);
+        i = i + 1;
+    }
+    let frame_us = (time.monotonic() - t0) * 10;
+    print(
+        "sample (ps+parse of " + to_string(snap.procs.len()) + " procs): " + to_string(sample_ms) + " ms"
+    );
+    print("frame build (filter+sort+layout, 120x40): " + to_string(frame_us) + " us");
+    0
+}

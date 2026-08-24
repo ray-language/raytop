@@ -1,0 +1,76 @@
+// raytop — display-cell width of text (the wcwidth problem).
+//
+// std/term has no cell-width API (recorded finding: any full-screen TUI needs
+// it), so this is a minimal wcwidth: East Asian Wide/Fullwidth ranges and the
+// common emoji blocks count 2 cells, control chars 0, the rest 1. Enough to
+// keep columns aligned when a command name carries CJK or an emoji.
+
+fn wide(cp: int) -> bool {
+    cp >= 4352 && cp <= 4447 || cp >= 11904 && cp <= 12350 || cp >= 12353 && cp <= 13311 || cp >= 13312 && cp <= 19903 || cp >= 19968 && cp <= 40959 || cp >= 40960 && cp <= 42191 || cp >= 44032 && cp <= 55203 || cp >= 63744 && cp <= 64255 || cp >= 65072 && cp <= 65103 || cp >= 65280 && cp <= 65376 || cp >= 65504 && cp <= 65510 || cp >= 127744 && cp <= 129791 || cp >= 131072 && cp <= 262141  // Hangul Jamo
+    // CJK radicals, punctuation
+    // kana, CJK symbols
+    // CJK ext A
+    // CJK unified
+    // Yi
+    // Hangul syllables
+    // CJK compat
+    // CJK compat forms
+    // fullwidth forms
+    // emoji blocks
+    // CJK ext B+
+}
+
+pub fn char_width(c: char) -> int {
+    let cp = c as int;
+    if (cp < 32 || cp >= 127 && cp < 160) {
+        return 0;
+    }
+    if (wide(cp)) { 2 } else { 1 }
+}
+
+pub fn display_width(s: string) -> int {
+    var w = 0;
+    for c in s.chars() {
+        w = w + char_width(c);
+    }
+    w
+}
+
+// Truncates to at most `cells` display cells (a wide char that would split
+// the boundary is dropped) and pads with spaces to exactly `cells`.
+pub fn fit(s: string, cells: int) -> string {
+    var out = "";
+    var w = 0;
+    var truncated = false;
+    for c in s.chars() {
+        if (!truncated) {
+            let cw = char_width(c);
+            if (w + cw > cells) {
+                truncated = true;
+            } else {
+                out = out + to_string(c);
+                w = w + cw;
+            }
+        }
+    }
+    while (w < cells) {
+        out = out + " ";
+        w = w + 1;
+    }
+    out
+}
+
+// Right-aligned fit for numeric columns.
+pub fn fit_right(s: string, cells: int) -> string {
+    let w = display_width(s);
+    if (w >= cells) {
+        return fit(s, cells);
+    }
+    var pad = "";
+    var i = w;
+    while (i < cells) {
+        pad = pad + " ";
+        i = i + 1;
+    }
+    pad + s
+}

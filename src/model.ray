@@ -1,0 +1,121 @@
+// raytop — view state: sort mode, filter, scroll; pure over a Snapshot.
+import sample;
+
+pub enum SortBy {
+    Cpu,
+    Mem,
+    Pid,
+}
+
+pub struct Model {
+    sort: SortBy,
+    filter: string,
+    typing_filter: bool,
+    scroll: int,
+    selected: int,
+}
+
+pub fn new_model() -> Model {
+    Model { sort: SortBy.Cpu, filter: "", typing_filter: false, scroll: 0, selected: 0 }
+}
+
+fn before(a: sample.Proc, b: sample.Proc, s: SortBy) -> bool {
+    match (s) {
+        SortBy.Cpu => {
+            if (a.cpu != b.cpu) {
+                return a.cpu > b.cpu;
+            }
+            a.pid <= b.pid
+        },
+        SortBy.Mem => {
+            if (a.rss_kb != b.rss_kb) {
+                return a.rss_kb > b.rss_kb;
+            }
+            a.pid <= b.pid
+        },
+        SortBy.Pid => a.pid <= b.pid,
+    }
+}
+
+fn merge(a: [sample.Proc], b: [sample.Proc], s: SortBy) -> [sample.Proc] {
+    var out: [sample.Proc] = [];
+    var i = 0;
+    var j = 0;
+    while (i < a.len() && j < b.len()) {
+        if (before(a[i], b[j], s)) {
+            out.push(a[i]);
+            i = i + 1;
+        } else {
+            out.push(b[j]);
+            j = j + 1;
+        }
+    }
+    while (i < a.len()) {
+        out.push(a[i]);
+        i = i + 1;
+    }
+    while (j < b.len()) {
+        out.push(b[j]);
+        j = j + 1;
+    }
+    out
+}
+
+fn sort_procs(xs: [sample.Proc], s: SortBy) -> [sample.Proc] {
+    if (xs.len() <= 1) {
+        return xs;
+    }
+    let mid = xs.len() / 2;
+    var left: [sample.Proc] = [];
+    var right: [sample.Proc] = [];
+    var i = 0;
+    while (i < xs.len()) {
+        if (i < mid) {
+            left.push(xs[i]);
+        } else {
+            right.push(xs[i]);
+        }
+        i = i + 1;
+    }
+    merge(sort_procs(left, s), sort_procs(right, s), s)
+}
+
+fn matches(p: sample.Proc, needle: string) -> bool {
+    if (needle == "") {
+        return true;
+    }
+    let n = needle.to_lower();
+    p.command
+        .to_lower()
+        .contains(n) || p.user.to_lower().contains(n) || to_string(p.pid).contains(n)
+}
+
+// The rows the table shows, filtered then sorted.
+pub fn visible(snap: sample.Snapshot, m: Model) -> [sample.Proc] {
+    var kept: [sample.Proc] = [];
+    for p in snap.procs {
+        if (matches(p, m.filter)) {
+            kept.push(p);
+        }
+    }
+    sort_procs(kept, m.sort)
+}
+
+// Clamps scroll/selection to the current row count and window height.
+pub fn clamp(m: Model, total: int, page: int) {
+    if (m.selected >= total) {
+        m.selected = total - 1;
+    }
+    if (m.selected < 0) {
+        m.selected = 0;
+    }
+    if (m.selected < m.scroll) {
+        m.scroll = m.selected;
+    }
+    if (page > 0 && m.selected >= m.scroll + page) {
+        m.scroll = m.selected - page + 1;
+    }
+    if (m.scroll < 0) {
+        m.scroll = 0;
+    }
+}
