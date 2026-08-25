@@ -7,15 +7,11 @@
 // two rows involved.
 import sample;
 import model;
-import width;
+import std/term;
 
-// String literals have no \x/\u escapes (recorded ergonomics finding): the
-// ESC byte is built by code point, like raycode does.
+// Since raylang M118 string literals take \u escapes: the ESC prefix is a literal.
 pub fn esc() -> string {
-    match (char_from_code(27)) {
-        Option.Some(c) => to_string(c),
-        Option.None => "",
-    }
+    "\u{1B}"
 }
 
 fn rev() -> string { esc() + "[7m" }
@@ -45,7 +41,7 @@ fn header_line(snap: sample.Snapshot, cols: int) -> string {
     let text = " raytop  load " + snap.load + "  procs " + to_string(
         snap.procs.len()
     ) + "  cpu " + fmt1(snap.cpu_total) + "%  rss " + human_kb(snap.rss_total_kb);
-    bold() + width.fit(text, cols) + reset()
+    bold() + term.fit(text, cols) + reset()
 }
 
 fn columns_line(m: model.Model, cols: int) -> string {
@@ -61,22 +57,22 @@ fn columns_line(m: model.Model, cols: int) -> string {
         model.SortBy.Pid => "▾",
         _ => " ",
     };
-    let text = width.fit_right(
+    let text = term.fit_right(
         "PID" + mark_pid,
         7
-    ) + " " + width.fit_right("CPU%" + mark_cpu, 6) + " " + width.fit_right("MEM%" + mark_mem, 6) + " " + width.fit_right("RSS", 7) + " " + width.fit("ST", 3) + width.fit("USER", 10) + " COMMAND";
-    rev() + width.fit(text, cols) + reset()
+    ) + " " + term.fit_right("CPU%" + mark_cpu, 6) + " " + term.fit_right("MEM%" + mark_mem, 6) + " " + term.fit_right("RSS", 7) + " " + term.fit("ST", 3) + term.fit("USER", 10) + " COMMAND";
+    rev() + term.fit(text, cols) + reset()
 }
 
 fn row_line(p: sample.Proc, selected: bool, cols: int) -> string {
-    let text = width.fit_right(
+    let text = term.fit_right(
         to_string(p.pid),
         7
-    ) + " " + width.fit_right(fmt1(p.cpu), 6) + " " + width.fit_right(fmt1(p.mem), 6) + " " + width.fit_right(human_kb(p.rss_kb), 7) + " " + width.fit(p.state, 3) + width.fit(p.user, 10) + " " + p.command;
+    ) + " " + term.fit_right(fmt1(p.cpu), 6) + " " + term.fit_right(fmt1(p.mem), 6) + " " + term.fit_right(human_kb(p.rss_kb), 7) + " " + term.fit(p.state, 3) + term.fit(p.user, 10) + " " + p.command;
     if (selected) {
-        rev() + width.fit(text, cols) + reset()
+        rev() + term.fit(text, cols) + reset()
     } else {
-        width.fit(text, cols)
+        term.fit(text, cols)
     }
 }
 
@@ -92,7 +88,7 @@ fn footer_line(m: model.Model, shown: int, total: int, cols: int) -> string {
             shown
         ) + "/" + to_string(total)
     };
-    rev() + width.fit(text, cols) + reset()
+    rev() + term.fit(text, cols) + reset()
 }
 
 // The visible page height for a given terminal height.
@@ -114,7 +110,7 @@ pub fn frame(snap: sample.Snapshot, m: model.Model, cols: int, rows: int) -> [st
         if (idx < visible.len()) {
             out.push(row_line(visible[idx], idx == m.selected, cols));
         } else {
-            out.push(width.fit("", cols));
+            out.push(term.fit("", cols));
         }
         i = i + 1;
     }
@@ -144,13 +140,13 @@ pub fn dump(snap: sample.Snapshot, m: model.Model, top: int) {
         "load " + snap.load + "  procs " + to_string(snap.procs.len()) + "  cpu " + fmt1(snap.cpu_total) + "%  rss " + human_kb(snap.rss_total_kb)
     );
     print(
-        width.fit_right("PID", 7) + " " + width.fit_right("CPU%", 6) + " " + width.fit_right("MEM%", 6) + " " + width.fit_right("RSS", 7) + " " + width.fit("ST", 3) + width.fit("USER", 10) + " COMMAND"
+        term.fit_right("PID", 7) + " " + term.fit_right("CPU%", 6) + " " + term.fit_right("MEM%", 6) + " " + term.fit_right("RSS", 7) + " " + term.fit("ST", 3) + term.fit("USER", 10) + " COMMAND"
     );
     var i = 0;
     while (i < visible.len() && i < top) {
         let p = visible[i];
         print(
-            width.fit_right(to_string(p.pid), 7) + " " + width.fit_right(fmt1(p.cpu), 6) + " " + width.fit_right(fmt1(p.mem), 6) + " " + width.fit_right(human_kb(p.rss_kb), 7) + " " + width.fit(p.state, 3) + width.fit(p.user, 10) + " " + p.command
+            term.fit_right(to_string(p.pid), 7) + " " + term.fit_right(fmt1(p.cpu), 6) + " " + term.fit_right(fmt1(p.mem), 6) + " " + term.fit_right(human_kb(p.rss_kb), 7) + " " + term.fit(p.state, 3) + term.fit(p.user, 10) + " " + p.command
         );
         i = i + 1;
     }

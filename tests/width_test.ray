@@ -1,28 +1,28 @@
-// Display-cell width: ASCII, CJK, emoji, truncation at a wide boundary.
-import width;
+// Display-cell width via std/term (adopted from the local width.ray in raylang M117).
+import std/term;
 
 @test
 fn ascii_is_one_cell_cjk_and_emoji_are_two() {
-    assert_eq(width.display_width("launchd"), 7);
-    assert_eq(width.display_width("日本語"), 6);
-    assert_eq(width.display_width("a日b"), 4);
-    assert_eq(width.display_width("🦀"), 2);
-    assert_eq(width.display_width(""), 0);
+    assert_eq(term.width("launchd"), 7);
+    assert_eq(term.width("日本語"), 6);
+    assert_eq(term.width("a日b"), 4);
+    assert_eq(term.width("🦀"), 2);
+    assert_eq(term.width(""), 0);
 }
 
 @test
 fn fit_pads_and_truncates_by_cells() {
-    assert_eq(width.fit("abc", 5), "abc  ");
-    assert_eq(width.fit("abcdef", 4), "abcd");
+    assert_eq(term.fit("abc", 5), "abc  ");
+    assert_eq(term.fit("abcdef", 4), "abcd");
     // 日=2, 本=2 → "日本" fills 4; the third char does not fit.
-    assert_eq(width.fit("日本語", 4), "日本");
+    assert_eq(term.fit("日本語", 4), "日本");
     // A wide char split across the boundary is dropped and padded instead.
-    assert_eq(width.fit("日本語", 5), "日本 ");
-    assert_eq(width.display_width(width.fit("日本語", 5)), 5);
+    assert_eq(term.fit("日本語", 5), "日本 ");
+    assert_eq(term.width(term.fit("日本語", 5)), 5);
 }
 
 @test
 fn fit_right_aligns_numbers() {
-    assert_eq(width.fit_right("42", 5), "   42");
-    assert_eq(width.fit_right("123456", 4), "1234");
+    assert_eq(term.fit_right("42", 5), "   42");
+    assert_eq(term.fit_right("123456", 4), "1234");
 }
