@@ -1,6 +1,6 @@
 # raytop
 
-Monitor de procesos **de pantalla completa** para el terminal (htop en pequeño), escrito en [raylang](https://github.com/roberto-ayala/raylang). Es la app que sube el escalón que raycode no subía: poseer el terminal ENTERO — pantalla alternativa, cursor oculto, redibujado diferencial línea a línea, resize en vivo — sobre `std/term` + `io.read_timeout` (el patrón tecla-o-plazo probado en raycode), con muestreo vía `std/process` (`ps`, sin `/proc`: igual en macOS y Linux).
+Monitor de procesos **de pantalla completa** para el terminal (htop en pequeño), escrito en [raylang](https://github.com/ray-language/raylang). Es la app que sube el escalón que raycode no subía: poseer el terminal ENTERO — pantalla alternativa, cursor oculto, redibujado diferencial línea a línea, resize en vivo — sobre `std/term` + `io.read_timeout` (el patrón tecla-o-plazo probado en raycode), con muestreo vía `std/process` (`ps`, sin `/proc`: igual en macOS y Linux).
 
 ```text
 $ raytop                      # TUI a 1 s de refresco
