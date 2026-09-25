@@ -85,9 +85,9 @@ fn matches(p: sample.Proc, needle: string) -> bool {
         return true;
     }
     let n = needle.to_lower();
-    p.command
-        .to_lower()
-        .contains(n) || p.user.to_lower().contains(n) || to_string(p.pid).contains(n)
+    p.command.to_lower().contains(n)
+        || p.user.to_lower().contains(n)
+        || to_string(p.pid).contains(n)
 }
 
 // The rows the table shows, filtered then sorted.

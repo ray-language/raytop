@@ -38,9 +38,14 @@ fn fmt1(f: float) -> string {
 }
 
 fn header_line(snap: sample.Snapshot, cols: int) -> string {
-    let text = " raytop  load " + snap.load + "  procs " + to_string(
-        snap.procs.len()
-    ) + "  cpu " + fmt1(snap.cpu_total) + "%  rss " + human_kb(snap.rss_total_kb);
+    let text = " raytop  load "
+        + snap.load
+        + "  procs "
+        + to_string(snap.procs.len())
+        + "  cpu "
+        + fmt1(snap.cpu_total)
+        + "%  rss "
+        + human_kb(snap.rss_total_kb);
     bold() + term.fit(text, cols) + reset()
 }
 
@@ -57,18 +62,33 @@ fn columns_line(m: model.Model, cols: int) -> string {
         model.SortBy.Pid => "▾",
         _ => " ",
     };
-    let text = term.fit_right(
-        "PID" + mark_pid,
-        7
-    ) + " " + term.fit_right("CPU%" + mark_cpu, 6) + " " + term.fit_right("MEM%" + mark_mem, 6) + " " + term.fit_right("RSS", 7) + " " + term.fit("ST", 3) + term.fit("USER", 10) + " COMMAND";
+    let text = term.fit_right("PID" + mark_pid, 7)
+        + " "
+        + term.fit_right("CPU%" + mark_cpu, 6)
+        + " "
+        + term.fit_right("MEM%" + mark_mem, 6)
+        + " "
+        + term.fit_right("RSS", 7)
+        + " "
+        + term.fit("ST", 3)
+        + term.fit("USER", 10)
+        + " COMMAND";
     rev() + term.fit(text, cols) + reset()
 }
 
 fn row_line(p: sample.Proc, selected: bool, cols: int) -> string {
-    let text = term.fit_right(
-        to_string(p.pid),
-        7
-    ) + " " + term.fit_right(fmt1(p.cpu), 6) + " " + term.fit_right(fmt1(p.mem), 6) + " " + term.fit_right(human_kb(p.rss_kb), 7) + " " + term.fit(p.state, 3) + term.fit(p.user, 10) + " " + p.command;
+    let text = term.fit_right(to_string(p.pid), 7)
+        + " "
+        + term.fit_right(fmt1(p.cpu), 6)
+        + " "
+        + term.fit_right(fmt1(p.mem), 6)
+        + " "
+        + term.fit_right(human_kb(p.rss_kb), 7)
+        + " "
+        + term.fit(p.state, 3)
+        + term.fit(p.user, 10)
+        + " "
+        + p.command;
     if (selected) {
         rev() + term.fit(text, cols) + reset()
     } else {
@@ -80,13 +100,17 @@ fn footer_line(m: model.Model, shown: int, total: int, cols: int) -> string {
     let text = if (m.typing_filter) {
         " filter: " + m.filter + "▏  (Enter fija, Esc borra)"
     } else if (m.filter != "") {
-        " q quit  c/m/p sort  / filter [" + m.filter + "]  ↑↓ move  r refresh   " + to_string(
-            shown
-        ) + "/" + to_string(total)
+        " q quit  c/m/p sort  / filter ["
+            + m.filter
+            + "]  ↑↓ move  r refresh   "
+            + to_string(shown)
+            + "/"
+            + to_string(total)
     } else {
-        " q quit  c/m/p sort  / filter  ↑↓ move  r refresh   " + to_string(
-            shown
-        ) + "/" + to_string(total)
+        " q quit  c/m/p sort  / filter  ↑↓ move  r refresh   "
+            + to_string(shown)
+            + "/"
+            + to_string(total)
     };
     rev() + term.fit(text, cols) + reset()
 }
@@ -137,16 +161,44 @@ pub fn paint_diff(prev: [string], next: [string]) -> string {
 pub fn dump(snap: sample.Snapshot, m: model.Model, top: int) {
     let visible = model.visible(snap, m);
     print(
-        "load " + snap.load + "  procs " + to_string(snap.procs.len()) + "  cpu " + fmt1(snap.cpu_total) + "%  rss " + human_kb(snap.rss_total_kb)
+        "load "
+            + snap.load
+            + "  procs "
+            + to_string(snap.procs.len())
+            + "  cpu "
+            + fmt1(snap.cpu_total)
+            + "%  rss "
+            + human_kb(snap.rss_total_kb)
     );
     print(
-        term.fit_right("PID", 7) + " " + term.fit_right("CPU%", 6) + " " + term.fit_right("MEM%", 6) + " " + term.fit_right("RSS", 7) + " " + term.fit("ST", 3) + term.fit("USER", 10) + " COMMAND"
+        term.fit_right("PID", 7)
+            + " "
+            + term.fit_right("CPU%", 6)
+            + " "
+            + term.fit_right("MEM%", 6)
+            + " "
+            + term.fit_right("RSS", 7)
+            + " "
+            + term.fit("ST", 3)
+            + term.fit("USER", 10)
+            + " COMMAND"
     );
     var i = 0;
     while (i < visible.len() && i < top) {
         let p = visible[i];
         print(
-            term.fit_right(to_string(p.pid), 7) + " " + term.fit_right(fmt1(p.cpu), 6) + " " + term.fit_right(fmt1(p.mem), 6) + " " + term.fit_right(human_kb(p.rss_kb), 7) + " " + term.fit(p.state, 3) + term.fit(p.user, 10) + " " + p.command
+            term.fit_right(to_string(p.pid), 7)
+                + " "
+                + term.fit_right(fmt1(p.cpu), 6)
+                + " "
+                + term.fit_right(fmt1(p.mem), 6)
+                + " "
+                + term.fit_right(human_kb(p.rss_kb), 7)
+                + " "
+                + term.fit(p.state, 3)
+                + term.fit(p.user, 10)
+                + " "
+                + p.command
         );
         i = i + 1;
     }
