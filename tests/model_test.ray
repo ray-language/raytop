@@ -41,6 +41,23 @@ fn sorts_by_cpu_mem_and_pid() {
 }
 
 @test
+fn ties_break_by_ascending_pid_regardless_of_input_order() {
+    var ps: [sample.Proc] = [];
+    ps.push(proc(30, 5.0, 300, "luis", "b"));
+    ps.push(proc(20, 5.0, 300, "ana", "a"));
+    ps.push(proc(10, 5.0, 300, "root", "c"));
+    let s = sample.Snapshot { procs: ps, load: "", cpu_total: 15.0, rss_total_kb: 900 };
+    var m = model.new_model();
+    let by_cpu = model.visible(s, m);
+    assert_eq(by_cpu[0].pid, 10);
+    assert_eq(by_cpu[2].pid, 30);
+    m.sort = model.SortBy.Mem;
+    let by_mem = model.visible(s, m);
+    assert_eq(by_mem[0].pid, 10);
+    assert_eq(by_mem[1].pid, 20);
+}
+
+@test
 fn filter_matches_command_user_and_pid() {
     var m = model.new_model();
     m.filter = "ana";

@@ -19,65 +19,29 @@ pub fn new_model() -> Model {
     Model { sort: SortBy.Cpu, filter: "", typing_filter: false, scroll: 0, selected: 0 }
 }
 
+// Strict "a goes before b" for the given sort mode: CPU and MEM descending,
+// ties (and the Pid mode) by ascending PID. sort_by is stable, so equal keys
+// keep their sampling order.
 fn before(a: sample.Proc, b: sample.Proc, s: SortBy) -> bool {
     match (s) {
         SortBy.Cpu => {
             if (a.cpu != b.cpu) {
                 return a.cpu > b.cpu;
             }
-            a.pid <= b.pid
+            a.pid < b.pid
         },
         SortBy.Mem => {
             if (a.rss_kb != b.rss_kb) {
                 return a.rss_kb > b.rss_kb;
             }
-            a.pid <= b.pid
+            a.pid < b.pid
         },
-        SortBy.Pid => a.pid <= b.pid,
+        SortBy.Pid => a.pid < b.pid,
     }
-}
-
-fn merge(a: [sample.Proc], b: [sample.Proc], s: SortBy) -> [sample.Proc] {
-    var out: [sample.Proc] = [];
-    var i = 0;
-    var j = 0;
-    while (i < a.len() && j < b.len()) {
-        if (before(a[i], b[j], s)) {
-            out.push(a[i]);
-            i = i + 1;
-        } else {
-            out.push(b[j]);
-            j = j + 1;
-        }
-    }
-    while (i < a.len()) {
-        out.push(a[i]);
-        i = i + 1;
-    }
-    while (j < b.len()) {
-        out.push(b[j]);
-        j = j + 1;
-    }
-    out
 }
 
 fn sort_procs(xs: [sample.Proc], s: SortBy) -> [sample.Proc] {
-    if (xs.len() <= 1) {
-        return xs;
-    }
-    let mid = xs.len() / 2;
-    var left: [sample.Proc] = [];
-    var right: [sample.Proc] = [];
-    var i = 0;
-    while (i < xs.len()) {
-        if (i < mid) {
-            left.push(xs[i]);
-        } else {
-            right.push(xs[i]);
-        }
-        i = i + 1;
-    }
-    merge(sort_procs(left, s), sort_procs(right, s), s)
+    sort_by(xs, fn(a: sample.Proc, b: sample.Proc) -> bool { before(a, b, s) })
 }
 
 fn matches(p: sample.Proc, needle: string) -> bool {
