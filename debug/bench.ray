@@ -22,7 +22,11 @@ fn main() -> int {
     }
     let frame_us = (time.monotonic() - t0) * 10;
     print(
-        "sample (ps+parse of " + to_string(snap.procs.len()) + " procs): " + to_string(sample_ms) + " ms"
+        "sample (ps+parse of "
+            + to_string(snap.procs.len())
+            + " procs): "
+            + to_string(sample_ms)
+            + " ms"
     );
     print("frame build (filter+sort+layout, 120x40): " + to_string(frame_us) + " us");
     0
