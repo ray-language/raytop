@@ -31,9 +31,11 @@ borra) · flechas/PgUp/PgDn/Home/End mover selección · `r` refrescar ya.
 - **Resize por sondeo** de `term.size()` en cada vuelta → repintado completo.
   Aguanta bien a 1 s; no hizo falta SIGWINCH (aunque `signals()` ya lo
   entrega como 28 — queda como mejora).
-- **Ancho de celdas propio** (`src/width.ray`): wcwidth mínimo (CJK/kana/
-  Hangul/fullwidth/emoji = 2 celdas) para que las columnas no se rompan con
-  un comando en japonés — `std/term` no trae esta API (hallazgo).
+- **Ancho de celdas** con `term.width`/`term.fit`/`term.fit_right` (raylang
+  M117; CJK/kana/Hangul/fullwidth/emoji = 2 celdas) para que las columnas no
+  se rompan con un comando en japonés.
+- **Orden** con `sort_by` de la stdlib (estable; raylang 1.11) y un
+  comparador estricto: CPU/MEM descendente, empates por PID ascendente.
 - Muestreo: `ps -axo pid=,pcpu=,pmem=,rss=,state=,user=,comm=` + `uptime`
   parseados a mano (el último campo conserva sus espacios).
 
@@ -56,10 +58,10 @@ un repintado ingenuo).
 | Redibujado diferencial por línea (selección = 2 líneas repintadas) | ✅ |
 | Orden CPU/MEM/PID + filtro incremental + scroll con selección | ✅ |
 | Resize en vivo (sondeo de `term.size()`) | ✅ |
-| Ancho Unicode de celdas (CJK/emoji) propio | ✅ |
+| Ancho Unicode de celdas (CJK/emoji) vía `term.width`/`fit` | ✅ |
 | `--once` (volcado plano, componible en scripts) | ✅ |
 | Binario nativo (TUI verificado bajo pty en ambos motores) | ✅ |
-| Tests (parser ps/uptime, width, modelo, render/diff puros) | ✅ 13 |
+| Tests (parser ps/uptime, width, modelo, render/diff puros) | ✅ 14 |
 | Barras de CPU/MEM por núcleo, árbol de procesos, kill | 📋 v2 |
 | Colores por estado/umbral | 📋 v2 |
 
@@ -67,13 +69,13 @@ un repintado ingenuo).
 
 Anotados en `raylang/IDEAS.md` §67:
 
-1. **No hay ancho de celdas Unicode en `std/term`** — la predicción del
+1. **[RESUELTO — raylang M117]** **No hay ancho de celdas Unicode en `std/term`** — la predicción del
    catálogo: cualquier TUI de pantalla completa lo necesita; el wcwidth mínimo
    de `src/width.ray` es el candidato natural a `term.width(s)`.
-2. **Los literales string no tienen `\x`/`\u`** — todo escape ANSI se
+2. **[RESUELTO — raylang M118]** **Los literales string no tienen `\x`/`\u`** — todo escape ANSI se
    construye con `char_from_code(27)` (raycode ya lo sufría; segunda app que
    repite el mismo helper → candidato a literal o a `term.style`).
-3. **No hay literales hexadecimales** (`0x1F300` no lexea): las tablas de
+3. **[RESUELTO — raylang M118]** **No hay literales hexadecimales** (`0x1F300` no lexea): las tablas de
    rangos Unicode quedan en decimal, ilegibles frente a la spec.
 4. **Positivo**: el patrón tecla-o-plazo escala del editor de línea al TUI
    completo sin cambios; `term.raw` restaura SIEMPRE (incluso saliendo por
@@ -84,12 +86,11 @@ Anotados en `raylang/IDEAS.md` §67:
 ## Desarrollo
 
 ```sh
-ray test                      # 13 tests
+ray test                      # 14 tests
 ray run src/main.ray --once
 ray build --native src/main.ray -o raytop --release
 ray run debug/bench.ray       # coste de muestreo y de frame
 ```
 
 Estructura: `src/main.ray` (CLI) · `sample.ray` (ps/uptime → Snapshot) ·
-`model.ray` (orden/filtro/scroll) · `width.ray` (celdas Unicode) ·
-`render.ray` (frame puro + diff) · `app.ray` (bucle raw + alt-screen).
+`model.ray` (orden/filtro/scroll) · `render.ray` (frame puro + diff) · `app.ray` (bucle raw + alt-screen).

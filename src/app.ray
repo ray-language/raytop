@@ -152,8 +152,7 @@ fn on_key(a: App, k: Key) {
 // waits 25 ms for the rest (a lone ESC resolves to the Esc key — raycode's
 // discipline).
 fn drain_keys(a: App) {
-    var more = true;
-    while (more && a.pending.len() > 0 && !a.quit) {
+    while (a.pending.len() > 0 && !a.quit) {
         match (term.decode(a.pending)) {
             Option.Some(decoded) => {
                 a.pending = a.pending.sub_bytes(decoded.1, a.pending.len());
